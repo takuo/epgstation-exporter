@@ -109,7 +109,7 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 		rulesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rules", "total"),
 			"Total number of rules",
-			nil, nil,
+			[]string{"enabled"}, nil,
 		),
 		ruleReservesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rule_reserves", "total"),
@@ -341,7 +341,6 @@ func (c *Collector) collectRules(ctx context.Context, ch chan<- prometheus.Metri
 			return fmt.Errorf("failed to decode rules response: %w", err)
 		}
 		resp.Body.Close()
-		rulesExt.Total = page.Total
 		rulesExt.Rules = append(rulesExt.Rules, page.Rules...)
 		offset += len(page.Rules)
 		if offset >= page.Total || len(page.Rules) == 0 {
@@ -349,13 +348,13 @@ func (c *Collector) collectRules(ctx context.Context, ch chan<- prometheus.Metri
 		}
 	}
 
-	// 予約件数は reservesCnt フィールドから直接取得 (type=all 指定時のみ返る)
-	ch <- prometheus.MustNewConstMetric(c.rulesTotal, prometheus.GaugeValue, float64(rulesExt.Total))
-
+	disabledTotal, enabledTotal := 0, 0
 	for _, rule := range rulesExt.Rules {
 		if !rule.Enable {
+			disabledTotal++
 			continue
 		}
+		enabledTotal++
 		name := strconv.Itoa(rule.ID)
 		if rule.RuleName != nil && *rule.RuleName != "" {
 			name = *rule.RuleName
@@ -374,5 +373,8 @@ func (c *Collector) collectRules(ctx context.Context, ch chan<- prometheus.Metri
 			name,
 		)
 	}
+	ch <- prometheus.MustNewConstMetric(c.rulesTotal, prometheus.GaugeValue, float64(enabledTotal), "enabled")
+	ch <- prometheus.MustNewConstMetric(c.rulesTotal, prometheus.GaugeValue, float64(disabledTotal), "disabled")
+
 	return nil
 }

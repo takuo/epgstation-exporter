@@ -178,7 +178,7 @@
                         "lastNotNull"
                     ]
                 },
-                "textMode": "value_and_name"
+                "textMode": "name"
             },
             "title": "Version",
             "type": "stat",
@@ -277,7 +277,7 @@
             },
             "gridPos": {
                 "h": 4,
-                "w": 3,
+                "w": 4,
                 "x": 10,
                 "y": 1
             },
@@ -292,7 +292,7 @@
                         "lastNotNull"
                     ]
                 },
-                "textMode": "auto"
+                "textMode": "value_and_name"
             },
             "title": "Rules",
             "type": "stat",
@@ -337,7 +337,7 @@
             "gridPos": {
                 "h": 4,
                 "w": 3,
-                "x": 13,
+                "x": 14,
                 "y": 1
             },
             "id": 5,
@@ -392,7 +392,7 @@
             "gridPos": {
                 "h": 4,
                 "w": 3,
-                "x": 16,
+                "x": 17,
                 "y": 1
             },
             "id": 6,
