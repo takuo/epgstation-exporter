@@ -1,0 +1,7 @@
+FROM gcr.io/distroless/static-debian13:nonroot
+
+COPY epgstation-exporter /epgstation-exporter
+
+EXPOSE 9888
+
+ENTRYPOINT ["/epgstation-exporter"]
