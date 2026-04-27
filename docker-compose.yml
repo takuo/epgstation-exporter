@@ -1,0 +1,13 @@
+services:
+  epgstation-exporter:
+    build: .
+    image: epgstation-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9888:9888"
+    environment:
+      EPGSTATION_API_URL: "http://epgstation:8888/api"
+      EPGSTATION_EXPORTER_PORT: "9888"
+      EPGSTATION_METRICS_PATH: "/metrics"
+      EPGSTATION_ENABLE_STORAGE: "true"
+      EPGSTATION_ENABLE_STREAMS: "true"

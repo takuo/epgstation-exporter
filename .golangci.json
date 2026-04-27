@@ -1,0 +1,134 @@
+{
+  "formatters": {
+    "exclusions": {
+      "generated": "lax",
+      "paths": [
+        "third_party$",
+        "builtin$",
+        "examples$",
+        "api.gen.go$"
+      ]
+    }
+  },
+  "issues": {
+    "max-issues-per-linter": 0,
+    "max-same-issues": 0
+  },
+  "linters": {
+    "enable": [
+      "depguard",
+      "errorlint",
+      "goconst",
+      "modernize",
+      "predeclared",
+      "revive",
+      "staticcheck",
+      "unconvert",
+      "unparam",
+      "wastedassign",
+      "whitespace"
+    ],
+    "exclusions": {
+      "generated": "lax",
+      "paths": [
+        "third_party$",
+        "builtin$",
+        "examples$",
+        "api.gen.go$"
+      ],
+      "presets": [
+        "comments",
+        "common-false-positives",
+        "legacy",
+        "std-error-handling"
+      ],
+      "rules": [
+        {
+          "linters": [
+            "errcheck"
+          ],
+          "path": "_test\\.go"
+        },
+        {
+          "linters": [
+            "goconst"
+          ],
+          "path": "(.+)_test\\.go"
+        }
+      ]
+    },
+    "settings": {
+      "depguard": {
+        "rules": {
+          "external": {
+            "deny": [
+              {
+                "desc": "use log \"github.com/vvakame/sdlog/aelog\" instead",
+                "pkg": "google.golang.org/appengine/v2/log"
+              },
+              {
+                "desc": "use \"github.com/google/uuid\" instead",
+                "pkg": "github.com/satori/go.uuid"
+              }
+            ],
+            "list-mode": "lax"
+          },
+          "deprecated": {
+            "deny": [
+              {
+                "desc": "use \"context\" package instead",
+                "pkg": "golang.org/x/net/context"
+              },
+              {
+                "desc": "replaced by io and os packages since Go 1.16: https://tip.golang.org/doc/go1.16#ioutil",
+                "pkg": "io/ioutil"
+              }
+            ],
+            "list-mode": "lax"
+          }
+        }
+      },
+      "dupl": {
+        "threshold": 100
+      },
+      "errcheck": {
+        "exclude-functions": [
+          "(net/http.ResponseWriter).Write",
+          "io.WriteString",
+          "io.Write",
+          "(*github.com/NamcoBandaiStudios/risa/mux.JSONRPCMux).Register",
+          "google.golang.org/appengine/v2/memcache.Set",
+          "google.golang.org/appengine/v2/memcache.Delete",
+          "theater/api/repository.UpdateUserSummary"
+        ]
+      },
+      "goconst": {
+        "min-len": 4,
+        "min-occurrences": 4
+      },
+      "gocyclo": {
+        "min-complexity": 10
+      },
+      "staticcheck": {
+        "checks": [
+          "all",
+          "-SA1029"
+        ]
+      },
+      "stylecheck": {
+        "checks": [
+          "all",
+          "-ST1000",
+          "-ST1003",
+          "-ST1016"
+        ]
+      }
+    }
+  },
+  "run": {
+    "issues-exit-code": 0,
+    "modules-download-mode": "mod",
+    "tests": true
+  },
+  "version": "2"
+}
