@@ -303,7 +303,7 @@
                         "uid": "${DS_PROMETHEUS}"
                     },
                     "expr": "epgstation_rules_total",
-                    "legendFormat": "",
+                    "legendFormat": "{{enabled}}",
                     "refId": "A"
                 }
             ]
