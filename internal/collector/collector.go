@@ -125,7 +125,7 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 		rulesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rules", "total"),
 			"Total number of rules",
-			[]string{"enabled"}, nil,
+			[]string{"state"}, nil,
 		),
 		ruleReservesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rule_reserves", "total"),
