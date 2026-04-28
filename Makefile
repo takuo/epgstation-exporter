@@ -1,6 +1,7 @@
 API_URL ?= http://localhost:8888/api
 OAPI_CODEGEN = go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 BINARY = epgstation-exporter
+override export CGO_ENABLED := 0
 
 .PHONY: all generate build test clean fetch-api-doc
 
