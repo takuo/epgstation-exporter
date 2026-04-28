@@ -12,11 +12,12 @@ import (
 )
 
 var cli struct {
-	APIURL        string `help:"EPGStation API URL" default:"http://localhost:8888/api" env:"EPGSTATION_API_URL" name:"api-url"`
-	Port          int    `help:"Listen port" default:"9888" env:"EPGSTATION_EXPORTER_PORT" name:"port"`
-	MetricsPath   string `help:"Metrics path" default:"/metrics" env:"EPGSTATION_METRICS_PATH" name:"metrics-path"`
-	EnableStorage bool   `help:"Enable storage metrics" default:"true" env:"EPGSTATION_ENABLE_STORAGE" negatable:"" name:"enable-storage"`
-	EnableStreams  bool   `help:"Enable streams metrics" default:"true" env:"EPGSTATION_ENABLE_STREAMS" negatable:"" name:"enable-streams"`
+	APIURL              string `help:"EPGStation API URL" default:"http://localhost:8888/api" env:"EPGSTATION_API_URL" name:"api-url"`
+	Port                int    `help:"Listen port" default:"9888" env:"EPGSTATION_EXPORTER_PORT" name:"port"`
+	MetricsPath         string `help:"Metrics path" default:"/metrics" env:"EPGSTATION_METRICS_PATH" name:"metrics-path"`
+	EnableStorage       bool   `help:"Enable storage metrics" default:"true" env:"EPGSTATION_ENABLE_STORAGE" negatable:"" name:"enable-storage"`
+	EnableStreams        bool   `help:"Enable streams metrics" default:"true" env:"EPGSTATION_ENABLE_STREAMS" negatable:"" name:"enable-streams"`
+	EnableRecordingInfo bool   `help:"Enable recording info metrics (may expose sensitive recording details and create high-cardinality labels)" default:"false" env:"EPGSTATION_ENABLE_RECORDING_INFO" negatable:"" name:"enable-recording-info"`
 }
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 		kong.Description("Prometheus exporter for EPGStation"),
 	)
 
-	c, err := collector.New(cli.APIURL, cli.EnableStorage, cli.EnableStreams)
+	c, err := collector.New(cli.APIURL, cli.EnableStorage, cli.EnableStreams, cli.EnableRecordingInfo)
 	if err != nil {
 		slog.Error("failed to create collector", "err", err)
 		panic(err)
