@@ -2,6 +2,10 @@ name: Dependabot auto-merge
 
 on:
   pull_request:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - .github/**/*.yml
 
 permissions:
   contents: write

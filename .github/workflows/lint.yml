@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+    paths:
+      - '**/*.go'
 
 permissions:
   contents: read
@@ -14,7 +16,6 @@ permissions:
 jobs:
   golangci-lint:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     env:
       CGO_ENABLED: "0"
     steps:
