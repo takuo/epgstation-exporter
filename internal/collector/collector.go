@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/takuo/epgstation-exporter/pkg/epgstation"
@@ -64,7 +65,7 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 		info: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "info"),
 			"EPGStation version information",
-			[]string{"version"}, nil,
+			[]string{"version", "url"}, nil,
 		),
 		reservesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "reserves", "total"),
@@ -198,7 +199,8 @@ func (c *Collector) collectVersion(ctx context.Context, ch chan<- prometheus.Met
 	}
 
 	ch <- prometheus.MustNewConstMetric(c.up, prometheus.GaugeValue, 1)
-	ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, resp.JSON200.Version)
+	baseURL := strings.TrimSuffix(strings.TrimRight(c.apiURL, "/"), "/api")
+	ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, resp.JSON200.Version, baseURL)
 	return nil
 }
 

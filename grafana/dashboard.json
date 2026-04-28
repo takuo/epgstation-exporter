@@ -49,7 +49,14 @@
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
     "id": null,
-    "links": [],
+    "links": [
+        {
+            "icon": "external link",
+            "targetBlank": true,
+            "title": "EPGStation",
+            "url": "${EPGSTATION_URL}"
+        }
+    ],
     "panels": [
         {
             "collapsed": false,
@@ -1091,6 +1098,32 @@
                 "query": "prometheus",
                 "refresh": 1,
                 "type": "datasource"
+            },
+            {
+                "current": {
+                    "selected": true,
+                    "text": "",
+                    "value": ""
+                },
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                },
+                "definition": "label_values(epgstation_info, url)",
+                "hide": 2,
+                "includeAll": false,
+                "label": "",
+                "multi": false,
+                "name": "EPGSTATION_URL",
+                "options": [],
+                "query": {
+                    "query": "label_values(epgstation_info, url)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "type": "query"
             }
         ]
     },
