@@ -65,19 +65,25 @@ func defaultHandlers(t *testing.T) map[string]http.HandlerFunc {
 		}),
 		"/rules": jsonHandler(t, epgstation.RulesExtended{
 			Rules: []epgstation.RuleItem{
-				{ID: 1, RuleName: new("ルールA"), ReservesCnt: new(3)},
-				{ID: 2, RuleName: new("ルールB")},
+				{ID: 1, RuleName: new("ルールA"), ReserveOption: epgstation.ReserveOption{Enable: true}, ReservesCnt: new(3)},
+				{ID: 2, RuleName: new("ルールB"), ReserveOption: epgstation.ReserveOption{Enable: true}},
+				{ID: 3, RuleName: new("ルールC"), ReserveOption: epgstation.ReserveOption{Enable: false}},
 			},
-			Total: 2,
+			Total: 3,
 		}),
 	}
 }
 
 func newCollectorFromServer(t *testing.T, server *httptest.Server, enableStorage bool) *collector.Collector {
 	t.Helper()
+	return newCollectorFromServerWithOptions(t, server, enableStorage, false)
+}
+
+func newCollectorFromServerWithOptions(t *testing.T, server *httptest.Server, enableStorage bool, enableRecordingInfo bool) *collector.Collector {
+	t.Helper()
 	client, err := epgstation.NewClientWithResponses(server.URL)
 	require.NoError(t, err)
-	return collector.NewWithClient(client, server.URL, enableStorage, true)
+	return collector.NewWithClient(client, server.URL, enableStorage, true, enableRecordingInfo)
 }
 
 func TestCollect_Up(t *testing.T) {
@@ -113,9 +119,20 @@ func TestCollect_VersionInfo(t *testing.T) {
 			require.Len(t, mf.GetMetric(), 1)
 			assert.Equal(t, float64(1), mf.GetMetric()[0].GetGauge().GetValue())
 			labels := mf.GetMetric()[0].GetLabel()
-			require.Len(t, labels, 1)
-			assert.Equal(t, "version", labels[0].GetName())
-			assert.Equal(t, "2.10.0", labels[0].GetValue())
+			require.Len(t, labels, 2)
+
+			labelValues := make(map[string]string, len(labels))
+			for _, label := range labels {
+				labelValues[label.GetName()] = label.GetValue()
+			}
+
+			version, ok := labelValues["version"]
+			require.True(t, ok, "version label should be present")
+			assert.Equal(t, "2.10.0", version)
+
+			url, ok := labelValues["url"]
+			require.True(t, ok, "url label should be present")
+			assert.Equal(t, server.URL, url)
 		}
 	}
 	assert.True(t, foundUp, "epgstation_up metric should be present")
@@ -173,6 +190,126 @@ func TestCollect_Recording(t *testing.T) {
 		}
 	}
 	t.Fatal("epgstation_recording_total metric not found")
+}
+
+func TestCollect_RecordingInfo(t *testing.T) {
+	channelID := 101
+	genre := epgstation.ProgramGenreLv1(3)
+	startAt := epgstation.UnixtimeMS(1713601800000)
+	endAt := epgstation.UnixtimeMS(1713603600000)
+
+	handlers := defaultHandlers(t)
+	handlers["/channels"] = jsonHandler(t, epgstation.ChannelItems{
+		{
+			Channel:       "27",
+			ChannelType:   epgstation.GR,
+			HalfWidthName: "TEST",
+			HasLogoData:   false,
+			Id:            channelID,
+			Name:          "テストチャンネル",
+			NetworkId:     1,
+			ServiceId:     1,
+		},
+	})
+	handlers["/recording"] = jsonHandler(t, epgstation.Records{
+		Records: []epgstation.RecordedItem{
+			{
+				Id:          10,
+				Name:        "番組A",
+				ChannelId:   &channelID,
+				StartAt:     startAt,
+				EndAt:       endAt,
+				Genre1:      &genre,
+				IsRecording: true,
+			},
+		},
+		Total: 1,
+	})
+
+	server := newMockServer(t, handlers)
+	defer server.Close()
+
+	c := newCollectorFromServerWithOptions(t, server, false, true)
+
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(c)
+
+	mfs, err := reg.Gather()
+	require.NoError(t, err)
+
+	found := false
+	for _, mf := range mfs {
+		if mf.GetName() != "epgstation_recording_info" {
+			continue
+		}
+
+		require.Len(t, mf.GetMetric(), 1)
+		metric := mf.GetMetric()[0]
+		assert.Equal(t, float64(1), metric.GetGauge().GetValue())
+
+		labelValues := map[string]string{}
+		for _, label := range metric.GetLabel() {
+			labelValues[label.GetName()] = label.GetValue()
+		}
+
+		assert.Equal(t, "10", labelValues["id"])
+		assert.Equal(t, "番組A", labelValues["title"])
+		assert.Equal(t, "101", labelValues["channel_id"])
+		assert.Equal(t, "テストチャンネル", labelValues["channel_name"])
+		assert.Equal(t, "1713601800", labelValues["start_at"])
+		assert.Equal(t, "1713603600", labelValues["end_at"])
+		assert.Equal(t, "ドラマ", labelValues["genre"])
+		found = true
+	}
+
+	assert.True(t, found, "epgstation_recording_info metric not found")
+}
+
+func TestCollect_RecordingInfoDisabled(t *testing.T) {
+	channelID := 201
+	handlers := defaultHandlers(t)
+	handlers["/channels"] = jsonHandler(t, epgstation.ChannelItems{
+		{
+			Channel:       "11",
+			ChannelType:   epgstation.GR,
+			HalfWidthName: "TEST2",
+			HasLogoData:   false,
+			Id:            channelID,
+			Name:          "無効化チャンネル",
+			NetworkId:     2,
+			ServiceId:     2,
+		},
+	})
+	handlers["/recording"] = jsonHandler(t, epgstation.Records{
+		Records: []epgstation.RecordedItem{
+			{
+				Id:          20,
+				Name:        "番組B",
+				ChannelId:   &channelID,
+				StartAt:     epgstation.UnixtimeMS(1713601800000),
+				EndAt:       epgstation.UnixtimeMS(1713603600000),
+				IsRecording: true,
+			},
+		},
+		Total: 1,
+	})
+
+	server := newMockServer(t, handlers)
+	defer server.Close()
+
+	c := newCollectorFromServerWithOptions(t, server, false, false)
+
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(c)
+
+	mfs, err := reg.Gather()
+	require.NoError(t, err)
+
+	for _, mf := range mfs {
+		if mf.GetName() == "epgstation_recording_info" {
+			t.Fatal("epgstation_recording_info should not be present when enableRecordingInfo=false")
+		}
+	}
 }
 
 func TestCollect_StorageMetrics(t *testing.T) {
@@ -328,7 +465,7 @@ func TestCollect_APIDown(t *testing.T) {
 }
 
 func TestDescribe(t *testing.T) {
-	c := collector.NewWithClient(nil, "", true, true)
+	c := collector.NewWithClient(nil, "", true, true, true)
 	ch := make(chan *prometheus.Desc, 20)
 	c.Describe(ch)
 	close(ch)
@@ -352,14 +489,34 @@ func TestCollect_RulesMetrics(t *testing.T) {
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
 
-	var rulesTotal float64
+	var rulesTotal, disabledTotal float64
 	ruleReserves := map[string]float64{} // key: id
 
 	for _, mf := range mfs {
 		switch mf.GetName() {
 		case "epgstation_rules_total":
-			require.Len(t, mf.GetMetric(), 1)
-			rulesTotal = mf.GetMetric()[0].GetGauge().GetValue()
+			require.Len(t, mf.GetMetric(), 2)
+			var foundEnabled, foundDisabled bool
+			for _, m := range mf.GetMetric() {
+				var state string
+				for _, l := range m.GetLabel() {
+					if l.GetName() == "state" {
+						state = l.GetValue()
+						break
+					}
+				}
+				require.NotEmpty(t, state, "epgstation_rules_total metric missing state label")
+				switch state {
+				case "enabled":
+					rulesTotal = m.GetGauge().GetValue()
+					foundEnabled = true
+				case "disabled":
+					disabledTotal = m.GetGauge().GetValue()
+					foundDisabled = true
+				}
+			}
+			require.True(t, foundEnabled, "epgstation_rules_total metric with state=enabled not found")
+			require.True(t, foundDisabled, "epgstation_rules_total metric with state=disabled not found")
 		case "epgstation_rule_reserves_total":
 			for _, m := range mf.GetMetric() {
 				var id, name string
@@ -378,6 +535,7 @@ func TestCollect_RulesMetrics(t *testing.T) {
 	}
 
 	assert.Equal(t, float64(2), rulesTotal)
+	assert.Equal(t, float64(1), disabledTotal)
 	assert.Equal(t, float64(3), ruleReserves["1"])
 	assert.Equal(t, float64(0), ruleReserves["2"])
 }
@@ -410,6 +568,6 @@ var _ prometheus.Collector = (*collector.Collector)(nil)
 // NewWithClientが使えることを確認
 var _ = func() {
 	client, _ := epgstation.NewClientWithResponses("http://localhost:8888/api")
-	_ = collector.NewWithClient(client, "http://localhost:8888/api", true, true)
+	_ = collector.NewWithClient(client, "http://localhost:8888/api", true, true, true)
 	_ = context.Background()
 }

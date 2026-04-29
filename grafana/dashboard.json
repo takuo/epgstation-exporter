@@ -39,6 +39,12 @@
             "id": "timeseries",
             "name": "Time series",
             "version": ""
+        },
+        {
+            "type": "panel",
+            "id": "table",
+            "name": "Table",
+            "version": ""
         }
     ],
     "annotations": {
@@ -49,7 +55,14 @@
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
     "id": null,
-    "links": [],
+    "links": [
+        {
+            "icon": "external link",
+            "targetBlank": true,
+            "title": "EPGStation",
+            "url": "${EPGSTATION_URL}"
+        }
+    ],
     "panels": [
         {
             "collapsed": false,
@@ -303,7 +316,7 @@
                         "uid": "${DS_PROMETHEUS}"
                     },
                     "expr": "epgstation_rules_total",
-                    "legendFormat": "{{enabled}}",
+                    "legendFormat": "{{state}}",
                     "refId": "A"
                 }
             ]
@@ -1071,6 +1084,135 @@
                     "refId": "A"
                 }
             ]
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 57
+            },
+            "id": 106,
+            "title": "Recording",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "align": "auto",
+                        "displayMode": "auto"
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "タイトル"
+                        },
+                        "properties": [
+                            {
+                                "id": "links",
+                                "value": [
+                                    {
+                                        "targetBlank": true,
+                                        "title": "EPGStationで開く",
+                                        "url": "${EPGSTATION_URL}/#/recorded/detail/${__data.fields.録画ID}"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 58
+            },
+            "id": 41,
+            "options": {
+                "footer": {
+                    "enablePagination": false
+                },
+                "showHeader": true
+            },
+            "title": "現在録画中の番組",
+            "type": "table",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "expr": "epgstation_recording_info * on(instance, job) group_left(url) epgstation_info",
+                    "instant": true,
+                    "legendFormat": "",
+                    "refId": "A"
+                }
+            ],
+            "transformations": [
+                {
+                    "id": "labelsToFields",
+                    "options": {
+                        "mode": "columns"
+                    }
+                },
+                {
+                    "id": "convertFieldType",
+                    "options": {
+                        "conversions": [
+                            {
+                                "targetField": "start_at",
+                                "destinationType": "time",
+                                "dateFormat": "X"
+                            },
+                            {
+                                "targetField": "end_at",
+                                "destinationType": "time",
+                                "dateFormat": "X"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "id": "organize",
+                    "options": {
+                        "excludeByName": {
+                            "Time": true,
+                            "Value": true,
+                            "__name__": true,
+                            "url": true,
+                            "channel_id": true,
+                            "instance": true,
+                            "job": true
+                        },
+                        "indexByName": {
+                            "id": 0,
+                            "title": 1,
+                            "channel_name": 2,
+                            "genre": 3,
+                            "start_at": 4,
+                            "end_at": 5
+                        },
+                        "renameByName": {
+                            "id": "録画ID",
+                            "title": "タイトル",
+                            "channel_id": "チャンネルID",
+                            "channel_name": "チャンネル名",
+                            "genre": "ジャンル",
+                            "start_at": "開始時刻",
+                            "end_at": "終了時刻"
+                        }
+                    }
+                }
+            ]
         }
     ],
     "refresh": "30s",
@@ -1091,6 +1233,32 @@
                 "query": "prometheus",
                 "refresh": 1,
                 "type": "datasource"
+            },
+            {
+                "current": {
+                    "selected": true,
+                    "text": "",
+                    "value": ""
+                },
+                "datasource": {
+                    "type": "prometheus",
+                    "uid": "${DS_PROMETHEUS}"
+                },
+                "definition": "label_values(epgstation_info, url)",
+                "hide": 2,
+                "includeAll": false,
+                "label": "",
+                "multi": false,
+                "name": "EPGSTATION_URL",
+                "options": [],
+                "query": {
+                    "query": "label_values(epgstation_info, url)",
+                    "refId": "PrometheusVariableQueryEditor-VariableQuery"
+                },
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "type": "query"
             }
         ]
     },

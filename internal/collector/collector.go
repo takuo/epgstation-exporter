@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/takuo/epgstation-exporter/pkg/epgstation"
@@ -14,13 +17,24 @@ import (
 
 const namespace = "epgstation"
 
+const (
+	defaultChannelCacheTTL = 60 * time.Minute
+	failedChannelCacheTTL  = 1 * time.Minute
+)
+
 // Collector はEPGStation APIからメトリクスを収集するPrometheusコレクター
 type Collector struct {
-	client        *epgstation.ClientWithResponses
-	httpClient    *http.Client
-	apiURL        string
-	enableStorage bool
-	enableStreams bool
+	client              *epgstation.ClientWithResponses
+	httpClient          *http.Client
+	apiURL              string
+	enableStorage       bool
+	enableStreams       bool
+	enableRecordingInfo bool
+
+	// チャンネル名キャッシュ
+	channelMu          sync.RWMutex
+	channelNames       map[int]string
+	nextChannelRefresh time.Time
 
 	// メトリクス定義
 	up                *prometheus.Desc
@@ -36,25 +50,27 @@ type Collector struct {
 	rulesTotal        *prometheus.Desc
 	ruleReservesTotal *prometheus.Desc
 	recordedTotal     *prometheus.Desc
+	recordingInfo     *prometheus.Desc
 }
 
 // New は新しいCollectorを作成する
-func New(apiURL string, enableStorage bool, enableStreams bool) (*Collector, error) {
+func New(apiURL string, enableStorage bool, enableStreams bool, enableRecordingInfo bool) (*Collector, error) {
 	client, err := epgstation.NewClientWithResponses(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create epgstation client: %w", err)
 	}
-	return NewWithClient(client, apiURL, enableStorage, enableStreams), nil
+	return NewWithClient(client, apiURL, enableStorage, enableStreams, enableRecordingInfo), nil
 }
 
 // NewWithClient は既存のClientWithResponsesを使ってCollectorを作成する（テスト用）
-func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enableStorage bool, enableStreams bool) *Collector {
+func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enableStorage bool, enableStreams bool, enableRecordingInfo bool) *Collector {
 	return &Collector{
-		client:        client,
-		httpClient:    &http.Client{},
-		apiURL:        apiURL,
-		enableStorage: enableStorage,
-		enableStreams: enableStreams,
+		client:              client,
+		httpClient:          &http.Client{},
+		apiURL:              apiURL,
+		enableStorage:       enableStorage,
+		enableStreams:       enableStreams,
+		enableRecordingInfo: enableRecordingInfo,
 
 		up: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "up"),
@@ -64,7 +80,7 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 		info: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", "info"),
 			"EPGStation version information",
-			[]string{"version"}, nil,
+			[]string{"version", "url"}, nil,
 		),
 		reservesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "reserves", "total"),
@@ -109,7 +125,7 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 		rulesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rules", "total"),
 			"Total number of rules",
-			[]string{"enabled"}, nil,
+			[]string{"state"}, nil,
 		),
 		ruleReservesTotal: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "rule_reserves", "total"),
@@ -120,6 +136,11 @@ func NewWithClient(client *epgstation.ClientWithResponses, apiURL string, enable
 			prometheus.BuildFQName(namespace, "recorded", "total"),
 			"Total number of recorded programs in the library",
 			nil, nil,
+		),
+		recordingInfo: prometheus.NewDesc(
+			prometheus.BuildFQName(namespace, "recording", "info"),
+			"Information about currently recording programs",
+			[]string{"id", "title", "channel_id", "channel_name", "start_at", "end_at", "genre"}, nil,
 		),
 	}
 }
@@ -143,6 +164,9 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.rulesTotal
 	ch <- c.ruleReservesTotal
 	ch <- c.recordedTotal
+	if c.enableRecordingInfo {
+		ch <- c.recordingInfo
+	}
 }
 
 // Collect はPrometheus Collectorインターフェースを実装する
@@ -188,6 +212,46 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// getChannelNames はチャンネルID->名前のマップを返す。TTL内はキャッシュを使用する。
+func (c *Collector) getChannelNames(ctx context.Context) map[int]string {
+	c.channelMu.RLock()
+	if c.channelNames != nil && time.Now().Before(c.nextChannelRefresh) {
+		names := c.channelNames
+		c.channelMu.RUnlock()
+		return names
+	}
+	c.channelMu.RUnlock()
+
+	c.channelMu.Lock()
+	defer c.channelMu.Unlock()
+	// ダブルチェック
+	if c.channelNames != nil && time.Now().Before(c.nextChannelRefresh) {
+		return c.channelNames
+	}
+
+	resp, err := c.client.GetChannelsWithResponse(ctx)
+	if err != nil || resp.StatusCode() != http.StatusOK || resp.JSON200 == nil {
+		if err != nil {
+			slog.Warn("failed to fetch channels", "err", err)
+		} else {
+			slog.Warn("unexpected status from channels API", "status", resp.Status())
+		}
+		if c.channelNames == nil {
+			c.channelNames = make(map[int]string)
+		}
+		c.nextChannelRefresh = time.Now().Add(failedChannelCacheTTL)
+		return c.channelNames
+	}
+	names := make(map[int]string, len(*resp.JSON200))
+	for _, ch := range *resp.JSON200 {
+		names[ch.Id] = ch.Name
+	}
+	c.channelNames = names
+	c.nextChannelRefresh = time.Now().Add(defaultChannelCacheTTL)
+	slog.Debug("channel cache refreshed", "count", len(names))
+	return names
+}
+
 func (c *Collector) collectVersion(ctx context.Context, ch chan<- prometheus.Metric) error {
 	resp, err := c.client.GetVersionWithResponse(ctx)
 	if err != nil {
@@ -198,7 +262,8 @@ func (c *Collector) collectVersion(ctx context.Context, ch chan<- prometheus.Met
 	}
 
 	ch <- prometheus.MustNewConstMetric(c.up, prometheus.GaugeValue, 1)
-	ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, resp.JSON200.Version)
+	baseURL := strings.TrimSuffix(strings.TrimRight(c.apiURL, "/"), "/api")
+	ch <- prometheus.MustNewConstMetric(c.info, prometheus.GaugeValue, 1, resp.JSON200.Version, baseURL)
 	return nil
 }
 
@@ -221,6 +286,9 @@ func (c *Collector) collectReserves(ctx context.Context, ch chan<- prometheus.Me
 
 func (c *Collector) collectRecording(ctx context.Context, ch chan<- prometheus.Metric) error {
 	limit := 1
+	if c.enableRecordingInfo {
+		limit = 20
+	}
 	isHalfWidth := false
 	resp, err := c.client.GetRecordingWithResponse(ctx, &epgstation.GetRecordingParams{
 		Limit:       &limit,
@@ -234,6 +302,39 @@ func (c *Collector) collectRecording(ctx context.Context, ch chan<- prometheus.M
 	}
 
 	ch <- prometheus.MustNewConstMetric(c.recordingTotal, prometheus.GaugeValue, float64(resp.JSON200.Total))
+	if !c.enableRecordingInfo {
+		return nil
+	}
+
+	// チャンネル名マップを取得（TTL付きキャッシュ）
+	var channelNames map[int]string
+	if len(resp.JSON200.Records) > 0 {
+		channelNames = c.getChannelNames(ctx)
+	}
+
+	for _, item := range resp.JSON200.Records {
+		idStr := strconv.Itoa(item.Id)
+		channelIDStr := ""
+		channelName := ""
+		if item.ChannelId != nil {
+			channelIDStr = strconv.Itoa(*item.ChannelId)
+			if name, ok := channelNames[*item.ChannelId]; ok {
+				channelName = name
+			}
+		}
+		startAt := strconv.FormatInt(int64(item.StartAt)/1000, 10)
+		endAt := strconv.FormatInt(int64(item.EndAt)/1000, 10)
+		genre := ""
+		if item.Genre1 != nil {
+			genre = epgstation.GenreName(*item.Genre1)
+		}
+		ch <- prometheus.MustNewConstMetric(
+			c.recordingInfo,
+			prometheus.GaugeValue,
+			1,
+			idStr, item.Name, channelIDStr, channelName, startAt, endAt, genre,
+		)
+	}
 	return nil
 }
 

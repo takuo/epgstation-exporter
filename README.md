@@ -9,16 +9,17 @@
 | メトリクス名 | 種別 | ラベル | 説明 |
 |---|---|---|---|
 | `epgstation_up` | Gauge | - | EPGStation が稼働中かどうか (1: 正常, 0: ダウン) |
-| `epgstation_info` | Gauge | `version` | EPGStation のバージョン情報 |
+| `epgstation_info` | Gauge | `version`, `url` | EPGStation のバージョン情報 |
 | `epgstation_reserves_total` | Gauge | `type` | 予約の総数 |
 | `epgstation_recording_total` | Gauge | - | 録画中の番組数 |
+| `epgstation_recording_info` | Gauge | `id`, `title`, `channel_id`, `channel_name`, `start_at`, `end_at`, `genre` | 録画中の番組情報 (値は常に 1) |
 | `epgstation_storage_available_bytes` | Gauge | `name` | ストレージの空き容量 (バイト) |
 | `epgstation_storage_used_bytes` | Gauge | `name` | ストレージの使用量 (バイト) |
 | `epgstation_storage_total_bytes` | Gauge | `name` | ストレージの総容量 (バイト) |
 | `epgstation_encode_running_total` | Gauge | - | 実行中のエンコードジョブ数 |
 | `epgstation_encode_waiting_total` | Gauge | - | 待機中のエンコードジョブ数 |
 | `epgstation_streams_total` | Gauge | `type` | ストリームの総数 |
-| `epgstation_rules_total` | Gauge | - | 録画ルールの総数 |
+| `epgstation_rules_total` | Gauge | `state` | 録画ルールの総数 (`state`: `enabled` / `disabled`) |
 | `epgstation_rule_reserves_total` | Gauge | `id`, `name` | ルールごとの予約数 |
 
 ストレージメトリクスは `--no-enable-storage`、ストリームメトリクスは `--no-enable-streams` で無効化できます。
@@ -55,6 +56,7 @@ docker compose up -d
 | `--metrics-path` | `EPGSTATION_METRICS_PATH` | `/metrics` | メトリクスのパス |
 | `--[no-]enable-storage` | `EPGSTATION_ENABLE_STORAGE` | `true` | ストレージメトリクスの有効/無効 |
 | `--[no-]enable-streams` | `EPGSTATION_ENABLE_STREAMS` | `true` | ストリームメトリクスの有効/無効 |
+| `--[no-]enable-recording-info` | `EPGSTATION_ENABLE_RECORDING_INFO` | `false` | 録画中番組情報メトリクスの有効/無効 |
 
 ## Grafana ダッシュボード
 
@@ -75,6 +77,9 @@ docker compose up -d
 | Rules | Reserves per Rule (Top 20) |
 | Storage | Storage Usage (%), Storage Total / Used / Available |
 | Streams | Streams by Type |
+| Recording | 現在録画中の番組 (タイトル・チャンネル・ジャンル・開始/終了時刻、EPGStation へのリンク付き) |
+
+> **Note:** ダッシュボードにはテンプレート変数 `EPGSTATION_URL` が設定されており、`epgstation_info` の `url` ラベルから自動取得されます。録画中番組テーブルのタイトルをクリックすると EPGStation の該当ページを開きます。
 
 ## ビルド
 
